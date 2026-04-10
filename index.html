@@ -17,6 +17,7 @@
             --border: #333333;
             --danger: #cf6679;
             --success: #4caf50;
+            --warning: #ffb74d;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -67,8 +68,10 @@
             transition: opacity 0.2s;
         }
         button:active { opacity: 0.8; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         button.secondary { background-color: transparent; color: var(--primary); border: 1px solid var(--primary); }
         button.small { padding: 8px; font-size: 0.9rem; width: auto; flex-shrink: 0; }
+        button.danger { background-color: transparent; color: var(--danger); border: 1px solid var(--danger); }
 
         /* Sections & Cards */
         .view-section {
@@ -105,7 +108,7 @@
         .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; }
         .progress-fill.success { background: var(--success); }
 
-        .bmi-badge {
+        .badge {
             display: inline-block;
             padding: 4px 8px;
             border-radius: 4px;
@@ -115,23 +118,22 @@
         }
 
         /* Lists */
-        .workout-item {
+        .list-item {
             background: var(--surface-light);
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-        }
-        
-        .user-result-item {
-            background: var(--surface-light);
-            padding: 10px;
+            padding: 12px;
             border-radius: 8px;
             margin-bottom: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 0.9rem;
         }
+
+        .friend-item {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .friend-item:active { background: var(--border); }
 
         /* Bottom Nav */
         nav {
@@ -161,7 +163,7 @@
         .nav-item.active { color: var(--primary); }
         .nav-icon { font-size: 1.5rem; margin-bottom: 4px; }
 
-        /* Toast Notification */
+        /* Overlays & Modals */
         #toast {
             position: fixed;
             top: 20px;
@@ -180,11 +182,56 @@
         }
         #toast.show { opacity: 1; }
 
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .vs-bar {
+            height: 12px; width: 100%; background: var(--surface-light); border-radius: 6px; overflow: hidden; display: flex; margin: 15px 0;
+        }
+        .vs-fill-me { height: 100%; background: var(--primary); transition: width 0.5s; }
+        .vs-fill-friend { height: 100%; background: var(--secondary); transition: width 0.5s; }
+
     </style>
 </head>
 <body>
 
 <div id="toast">Message</div>
+
+<!-- COMPARISON MODAL -->
+<div id="comparison-modal" class="modal-overlay hidden">
+    <div class="card" style="width: 90%; max-width: 400px; text-align: center; position: relative;">
+        <h2 style="margin-bottom: 20px;">Head-to-Head</h2>
+        
+        <div class="grid-2">
+            <div>
+                <div id="comp-me-avatar" style="font-size: 2.5rem; margin-bottom: 5px;">👤</div>
+                <h3 id="comp-me-name">Me</h3>
+                <div class="metric-highlight" style="font-size: 2rem;" id="comp-me-score">0</div>
+            </div>
+            <div>
+                <div id="comp-friend-avatar" style="font-size: 2.5rem; margin-bottom: 5px;">👤</div>
+                <h3 id="comp-friend-name">Friend</h3>
+                <div class="metric-highlight" style="font-size: 2rem; color: var(--secondary);" id="comp-friend-score">0</div>
+            </div>
+        </div>
+
+        <div class="vs-bar">
+            <div id="vs-bar-me" class="vs-fill-me" style="width: 50%;"></div>
+            <div id="vs-bar-friend" class="vs-fill-friend" style="width: 50%;"></div>
+        </div>
+
+        <p id="comp-message" style="margin: 20px 0; font-weight: bold; font-size: 1.1rem; color: var(--warning);"></p>
+        
+        <button class="secondary" onclick="closeComparison()">Close</button>
+    </div>
+</div>
 
 <div id="app-container">
 
@@ -222,9 +269,14 @@
 
     <!-- DASHBOARD VIEW -->
     <div id="view-dashboard" class="view-section">
-        <div class="flex-between">
+        <div class="flex-between" style="align-items: flex-start; margin-bottom: 15px;">
             <h2>Dashboard</h2>
-            <div id="bmi-display" class="bmi-badge">BMI: --</div>
+            <div style="text-align: right;">
+                <div class="badge" style="background: var(--primary-variant); color: #fff; margin-bottom: 5px;">
+                    🏆 Score: <span id="my-score-display">0</span>
+                </div>
+                <div id="bmi-display" class="badge" style="display: block;">BMI: --</div>
+            </div>
         </div>
         
         <!-- Targets Card -->
@@ -342,23 +394,31 @@
 
     <!-- SOCIAL VIEW -->
     <div id="view-social" class="view-section">
-        <h2>Social & Feed</h2>
+        <h2>Social Central</h2>
+        
+        <!-- Inbox / Requests -->
+        <div class="card" id="requests-card" style="display: none;">
+            <h3 style="color: var(--warning);">📥 Inbox: Friend Requests</h3>
+            <div id="friend-requests-list"></div>
+        </div>
+
+        <!-- Friends List -->
         <div class="card">
-            <h3>Find Friends</h3>
+            <h3>🏆 My Friends Leaderboard</h3>
+            <p>Tap a friend to go Head-to-Head!</p>
+            <div id="my-friends-list">
+                <p style="font-size: 0.9rem; color: var(--text-muted);">No friends yet. Add someone below!</p>
+            </div>
+        </div>
+
+        <!-- Search -->
+        <div class="card">
+            <h3>🔍 Find Friends</h3>
             <div class="flex-row">
-                <input type="text" id="search-user-input" placeholder="Search username (leave blank for all)" style="margin-bottom: 0;">
+                <input type="text" id="search-user-input" placeholder="Search username..." style="margin-bottom: 0;">
                 <button class="small" onclick="searchUsers()">Search</button>
             </div>
             <div id="search-user-results" style="margin-top: 10px;"></div>
-        </div>
-        <div class="card">
-            <h3>Friend Feed</h3>
-            <div style="border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; font-size: 0.9rem;">
-                <strong>@alex_fit</strong> hit a new PR on Squats: 120kg x 5!
-            </div>
-            <div style="font-size: 0.9rem;">
-                <strong>@sarah_runs</strong> ran 5km in 25:30.
-            </div>
         </div>
     </div>
 
@@ -430,7 +490,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Strict Firebase Config handling
     const userConfig = {
@@ -454,8 +514,16 @@
     let currentUserData = null;
     let currentUserId = null;
     let targets = { water: 2500, cals: 2000 }; 
+    
+    // Listeners
     let unsubDaily = null;
     let unsubWorkouts = null;
+    let unsubPublicUsers = null;
+    let unsubRelationships = null;
+
+    // Caches
+    let publicUsersMap = {};
+    let myRelationships = {}; // Format: { [targetUid]: 'pending' | 'accepted' }
 
     // --- UTILITIES ---
     const getTodayStr = () => {
@@ -470,14 +538,33 @@
         setTimeout(() => toast.classList.remove('show'), 3000);
     };
 
-    // Helper to keep user search directory updated
-    async function updatePublicProfile(uid, username, avatar) {
+    // Keep public profile updated for search/leaderboards
+    async function updatePublicProfile(uid, username, avatar, score) {
         try {
             const publicRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_registry', uid);
-            await setDoc(publicRef, { username, avatar, uid }, { merge: true });
+            // using merge:true so we don't accidentally overwrite if only updating one field
+            await setDoc(publicRef, { username, avatar, uid, score }, { merge: true });
         } catch(e) {
             console.error("Failed to update public registry", e);
         }
+    }
+
+    // Give points for activities
+    async function awardPoints(pts) {
+        if (!currentUserId || !currentUserData) return;
+        
+        let currentScore = currentUserData.score || 0;
+        let newScore = currentScore + pts;
+        
+        currentUserData.score = newScore;
+        document.getElementById('my-score-display').innerText = newScore;
+        
+        // Save to private
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { score: newScore });
+        
+        // Save to public registry (so friends see it)
+        await updatePublicProfile(currentUserId, currentUserData.username, currentUserData.avatar || '👤', newScore);
     }
 
     // --- UI LOGIC ---
@@ -529,10 +616,10 @@
                 
                 // Save private user profile
                 const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'profile', 'info');
-                await setDoc(profileRef, { username, gender, age, height, weight, avatar: '👤', createdAt: Date.now() });
+                await setDoc(profileRef, { username, gender, age, height, weight, avatar: '👤', score: 0, createdAt: Date.now() });
                 
-                // Save to public registry for searching
-                await updatePublicProfile(uid, username, '👤');
+                // Save to public registry
+                await updatePublicProfile(uid, username, '👤', 0);
                 
                 showToast("Account Created!");
             } else {
@@ -547,6 +634,8 @@
     window.logout = async () => {
         if(unsubDaily) unsubDaily();
         if(unsubWorkouts) unsubWorkouts();
+        if(unsubPublicUsers) unsubPublicUsers();
+        if(unsubRelationships) unsubRelationships();
         await signOut(auth);
     };
 
@@ -557,10 +646,14 @@
             document.getElementById('view-auth').classList.remove('active');
             document.getElementById('bottom-nav').classList.add('active');
             
+            // Start Global Listeners
+            setupPublicUsersListener();
+            setupRelationshipsListener();
+            
             // Load Profile
             await loadUserProfile();
             
-            // Setup Realtime Listeners
+            // Setup Private Listeners
             setupDailyListener();
             setupWorkoutsListener();
             listenToGlobalWorkouts();
@@ -569,12 +662,62 @@
         } else {
             currentUserId = null;
             currentUserData = null;
+            publicUsersMap = {};
+            myRelationships = {};
             document.getElementById('bottom-nav').classList.remove('active');
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
             document.getElementById('view-auth').classList.add('active');
             document.getElementById('cycle-tracker').classList.add('hidden');
         }
     });
+
+    // Fetches all public users into memory to power Leaderboard, Search, and VS Mode
+    function setupPublicUsersListener() {
+        if (!currentUserId) return;
+        const regRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_registry');
+        unsubPublicUsers = onSnapshot(regRef, (snapshot) => {
+            snapshot.forEach(docSnap => {
+                publicUsersMap[docSnap.id] = docSnap.data();
+            });
+            renderSocialLists(); // Update social tab when user scores change
+            if(document.getElementById('search-user-input').value) searchUsers(); // update search if open
+        }, (err) => console.error(err));
+    }
+
+    // Fetches all relationships and filters to find ours
+    function setupRelationshipsListener() {
+        if (!currentUserId) return;
+        const relRef = collection(db, 'artifacts', appId, 'public', 'data', 'relationships');
+        
+        unsubRelationships = onSnapshot(relRef, (snapshot) => {
+            myRelationships = {};
+            const requests = [];
+            const friends = [];
+
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                // Check if this relationship involves me
+                if (data.uidA === currentUserId || data.uidB === currentUserId) {
+                    const otherUid = data.uidA === currentUserId ? data.uidB : data.uidA;
+                    
+                    // Track state globally
+                    myRelationships[otherUid] = { status: data.status, docId: docSnap.id, requester: data.requester };
+
+                    // Sort into lists
+                    if (data.status === 'pending' && data.requester !== currentUserId) {
+                        // Someone requested ME
+                        requests.push(otherUid);
+                    } else if (data.status === 'accepted') {
+                        friends.push(otherUid);
+                    }
+                }
+            });
+
+            renderRequestsList(requests);
+            renderFriendsList(friends);
+
+        }, (err) => console.error(err));
+    }
 
     async function loadUserProfile() {
         if (!currentUserId) return;
@@ -584,23 +727,23 @@
         if (docSnap.exists()) {
             currentUserData = docSnap.data();
             
-            // Update UI Profile
+            // Set UI
             document.getElementById('display-username').innerText = currentUserData.username || "User";
             document.getElementById('current-weight-display').innerText = currentUserData.weight || "--";
+            document.getElementById('my-score-display').innerText = currentUserData.score || 0;
             
-            // Apply custom avatar if it exists
             if (currentUserData.avatar) {
                 document.getElementById('user-avatar').innerText = currentUserData.avatar;
             }
             
             if (currentUserData.gender === 'female') {
                 document.getElementById('cycle-tracker').classList.remove('hidden');
-                updateCycleUI(); // Initialize cycle prediction
+                updateCycleUI(); 
             }
 
-            // Ensure they are in the public registry (migration step for existing accounts)
+            // Sync legacy profiles to public registry
             if(currentUserData.username) {
-                updatePublicProfile(currentUserId, currentUserData.username, currentUserData.avatar || '👤');
+                updatePublicProfile(currentUserId, currentUserData.username, currentUserData.avatar || '👤', currentUserData.score || 0);
             }
 
             calculateMetrics();
@@ -623,12 +766,12 @@
         bmiEl.innerText = `BMI: ${bmi} (${bmiStatus})`;
         bmiEl.style.color = bmiColor;
 
-        // BMR (Mifflin-St Jeor) -> Target Cals
+        // Target Cals
         let bmr = (10 * weight) + (6.25 * height) - (5 * age);
         bmr += (gender === 'male') ? 5 : -161;
-        targets.cals = Math.round(bmr * 1.2); // Sedentary multiplier
+        targets.cals = Math.round(bmr * 1.2); 
         
-        // Target Water (ml) = weight(kg) * 35
+        // Target Water
         targets.water = Math.round(weight * 35);
 
         document.getElementById('target-cals').innerText = targets.cals;
@@ -649,14 +792,12 @@
                 cals = data.calories || 0;
             }
             
-            // Update Water UI
             document.getElementById('water-current').innerText = water;
             let wPct = Math.min((water / targets.water) * 100, 100) || 0;
             const wBar = document.getElementById('water-progress');
             wBar.style.width = `${wPct}%`;
             if(wPct >= 100) wBar.classList.add('success'); else wBar.classList.remove('success');
 
-            // Update Cals UI
             document.getElementById('cals-current').innerText = cals;
             let cPct = Math.min((cals / targets.cals) * 100, 100) || 0;
             const cBar = document.getElementById('cals-progress');
@@ -710,170 +851,232 @@
         }, (err) => console.error(err));
     }
 
-    // --- SEARCH USER LOGIC ---
-    window.searchUsers = async () => {
-        if (!currentUserId) return;
-        const queryText = document.getElementById('search-user-input').value.trim().toLowerCase();
-        const resultsDiv = document.getElementById('search-user-results');
-        
-        resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">Searching...</p>';
+    // --- SOCIAL & FRIEND LOGIC ---
 
-        try {
-            // Fetch all and filter in memory to avoid complex indexing
-            const registryRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_registry');
-            const snapshot = await getDocs(registryRef);
-            
-            resultsDiv.innerHTML = '';
-            let foundCount = 0;
+    // Initial render triggers if map updates late
+    let lastRequests = [];
+    let lastFriends = [];
+    function renderSocialLists() {
+        renderRequestsList(lastRequests);
+        renderFriendsList(lastFriends);
+    }
 
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                // If query is empty, show all. Otherwise, check if username matches.
-                if (!queryText || (data.username && data.username.toLowerCase().includes(queryText))) {
-                    foundCount++;
-                    const isSelf = data.uid === currentUserId;
-                    const userDiv = document.createElement('div');
-                    userDiv.className = 'user-result-item';
-                    userDiv.innerHTML = `
-                        <div class="flex-row">
-                            <span style="font-size: 1.5rem; background: var(--surface); width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${data.avatar || '👤'}</span>
-                            <span style="font-weight: 500;">${data.username} ${isSelf ? '<span style="color:var(--text-muted);font-size:0.8em;">(You)</span>' : ''}</span>
-                        </div>
-                        ${!isSelf ? `<button class="secondary small" onclick="sendFriendRequest('${data.uid}')">Add</button>` : ''}
-                    `;
-                    resultsDiv.appendChild(userDiv);
-                }
-            });
+    function renderRequestsList(requests) {
+        lastRequests = requests;
+        const listEl = document.getElementById('friend-requests-list');
+        const cardEl = document.getElementById('requests-card');
+        listEl.innerHTML = '';
 
-            if (foundCount === 0) {
-                resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users found. Note: Older accounts must log in once to appear here.</p>';
-            }
-
-        } catch (error) {
-            console.error("Error searching users:", error);
-            resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--danger);">Failed to search.</p>';
-        }
-    };
-
-    window.sendFriendRequest = (uid) => {
-        showToast("Friend Request Sent!");
-    };
-
-    // --- USER PROFILE ACTIONS ---
-
-    window.toggleEditUsername = () => {
-        const container = document.getElementById('edit-username-container');
-        container.classList.toggle('hidden');
-        if (!container.classList.contains('hidden') && currentUserData) {
-            document.getElementById('edit-username-input').value = currentUserData.username || '';
-        }
-    };
-
-    window.saveUsername = async () => {
-        const newName = document.getElementById('edit-username-input').value.trim();
-        if (!newName) return showToast("Username cannot be empty.");
-        if (!currentUserId) return;
-
-        try {
-            // Update private profile
-            const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
-            await updateDoc(profileRef, { username: newName });
-            
-            // Update public registry
-            await updatePublicProfile(currentUserId, newName, currentUserData.avatar || '👤');
-
-            // Update UI
-            currentUserData.username = newName;
-            document.getElementById('display-username').innerText = newName;
-            toggleEditUsername();
-            showToast("Username updated!");
-        } catch (e) {
-            console.error("Error updating username", e);
-            showToast("Failed to update username");
-        }
-    };
-
-    window.toggleAvatarSelector = () => {
-        document.getElementById('avatar-selector').classList.toggle('hidden');
-    };
-
-    window.setAvatar = async (emoji) => {
-        if (!currentUserId) return;
-        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
-        await updateDoc(profileRef, { avatar: emoji });
-        
-        // Update public registry so new avatar shows in search
-        await updatePublicProfile(currentUserId, currentUserData.username, emoji);
-
-        currentUserData.avatar = emoji;
-        document.getElementById('user-avatar').innerText = emoji;
-        document.getElementById('avatar-selector').classList.add('hidden');
-        showToast("Avatar updated!");
-    };
-
-    window.logCycleStart = async () => {
-        if (!currentUserId) return;
-        const dateInput = document.getElementById('cycle-date').value;
-        if (!dateInput) return showToast("Please select a date.");
-
-        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
-        await updateDoc(profileRef, { lastCycleStart: dateInput });
-        
-        showToast("Cycle Day 1 Logged!");
-        document.getElementById('cycle-date').value = '';
-        
-        // Update local state and UI immediately
-        currentUserData.lastCycleStart = dateInput;
-        updateCycleUI();
-    };
-
-    function updateCycleUI() {
-        if (!currentUserData || currentUserData.gender !== 'female') return;
-        
-        const statusDiv = document.getElementById('cycle-status');
-        if (!currentUserData.lastCycleStart) {
-            statusDiv.innerHTML = '<p>No cycle data logged yet.</p>';
+        if(requests.length === 0) {
+            cardEl.style.display = 'none';
             return;
         }
 
-        const lastStart = new Date(currentUserData.lastCycleStart);
-        const cycleLength = 28; // Standard average cycle length
-        
-        const nextCycle = new Date(lastStart);
-        nextCycle.setDate(nextCycle.getDate() + cycleLength);
-        
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        
-        // Calculate difference in days
-        const diffTime = nextCycle - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        cardEl.style.display = 'block';
+        requests.forEach(uid => {
+            const user = publicUsersMap[uid];
+            if(!user) return; // Wait for registry sync
+            const relInfo = myRelationships[uid];
 
-        let statusHtml = '';
-        if (diffDays > 0) {
-            statusHtml = `<p style="color: var(--primary); font-size: 1.1rem; font-weight: bold;">Next cycle in ${diffDays} days</p>
-                          <p style="font-size: 0.8rem; margin-top: 4px;">Predicted start: ${nextCycle.toLocaleDateString()}</p>`;
-        } else if (diffDays === 0) {
-            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">Predicted to start today!</p>`;
-        } else {
-            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">${Math.abs(diffDays)} days late</p>
-                          <p style="font-size: 0.8rem; margin-top: 4px;">Log your new Day 1 below when it begins.</p>`;
-        }
-        
-        statusDiv.innerHTML = statusHtml;
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div class="flex-row">
+                    <span style="font-size: 1.5rem;">${user.avatar || '👤'}</span>
+                    <span><strong>${user.username}</strong></span>
+                </div>
+                <div class="flex-row" style="gap: 5px;">
+                    <button class="small" onclick="handleFriendRequest('${relInfo.docId}', 'accepted')">Accept</button>
+                    <button class="small danger" onclick="handleFriendRequest('${relInfo.docId}', 'declined')">X</button>
+                </div>
+            `;
+            listEl.appendChild(div);
+        });
     }
 
+    function renderFriendsList(friends) {
+        lastFriends = friends;
+        const listEl = document.getElementById('my-friends-list');
+        listEl.innerHTML = '';
+
+        if(friends.length === 0) {
+            listEl.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No friends yet. Add someone below!</p>';
+            return;
+        }
+
+        // Sort friends by score
+        const sortedFriends = friends
+            .map(uid => publicUsersMap[uid])
+            .filter(u => u) // Remove undefined
+            .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        sortedFriends.forEach((user, index) => {
+            const isWinner = (currentUserData.score || 0) < (user.score || 0);
+            
+            const div = document.createElement('div');
+            div.className = 'list-item friend-item';
+            div.onclick = () => openComparison(user.uid);
+            
+            div.innerHTML = `
+                <div class="flex-row">
+                    <span style="font-weight: bold; color: var(--text-muted); width: 20px;">#${index+1}</span>
+                    <span style="font-size: 1.5rem;">${user.avatar || '👤'}</span>
+                    <span>${user.username}</span>
+                </div>
+                <div class="badge" style="background: ${isWinner ? 'var(--secondary)' : 'var(--surface)'}; color: ${isWinner ? '#000' : 'var(--primary)'}">
+                    Score: ${user.score || 0}
+                </div>
+            `;
+            listEl.appendChild(div);
+        });
+    }
+
+    window.searchUsers = () => {
+        if (!currentUserId) return;
+        const queryText = document.getElementById('search-user-input').value.trim().toLowerCase();
+        const resultsDiv = document.getElementById('search-user-results');
+        resultsDiv.innerHTML = '';
+
+        let foundCount = 0;
+        
+        // Filter locally from the already-fetched publicUsersMap
+        Object.values(publicUsersMap).forEach(user => {
+            if (!queryText || (user.username && user.username.toLowerCase().includes(queryText))) {
+                foundCount++;
+                const isSelf = user.uid === currentUserId;
+                const relInfo = myRelationships[user.uid];
+                
+                let btnHtml = '';
+                if (!isSelf) {
+                    if (!relInfo) {
+                        btnHtml = `<button class="secondary small" onclick="sendFriendRequest('${user.uid}')">Add</button>`;
+                    } else if (relInfo.status === 'pending') {
+                        if (relInfo.requester === currentUserId) {
+                            btnHtml = `<span style="font-size: 0.8rem; color: var(--text-muted);">Pending</span>`;
+                        } else {
+                            btnHtml = `<button class="small" onclick="handleFriendRequest('${relInfo.docId}', 'accepted')">Accept</button>`;
+                        }
+                    } else if (relInfo.status === 'accepted') {
+                        btnHtml = `<button class="secondary small" onclick="openComparison('${user.uid}')">VS</button>`;
+                    }
+                }
+
+                const userDiv = document.createElement('div');
+                userDiv.className = 'user-result-item';
+                userDiv.innerHTML = `
+                    <div class="flex-row">
+                        <span style="font-size: 1.5rem; background: var(--surface); width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${user.avatar || '👤'}</span>
+                        <div>
+                            <div style="font-weight: 500;">${user.username} ${isSelf ? '<span style="color:var(--text-muted);font-size:0.8em;">(You)</span>' : ''}</div>
+                            <div style="font-size: 0.7rem; color: var(--primary);">Score: ${user.score || 0}</div>
+                        </div>
+                    </div>
+                    ${btnHtml}
+                `;
+                resultsDiv.appendChild(userDiv);
+            }
+        });
+
+        if (foundCount === 0) {
+            resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users found.</p>';
+        }
+    };
+
+    window.sendFriendRequest = async (targetUid) => {
+        if (!currentUserId) return;
+        const uids = [currentUserId, targetUid].sort();
+        const relId = `${uids[0]}_${uids[1]}`;
+        const relRef = doc(db, 'artifacts', appId, 'public', 'data', 'relationships', relId);
+        
+        try {
+            await setDoc(relRef, {
+                uidA: uids[0],
+                uidB: uids[1],
+                requester: currentUserId,
+                status: 'pending',
+                timestamp: Date.now()
+            });
+            showToast("Friend Request Sent!");
+            searchUsers(); // Refresh search UI
+        } catch(e) {
+            console.error(e);
+            showToast("Failed to send request.");
+        }
+    };
+
+    window.handleFriendRequest = async (docId, action) => {
+        const relRef = doc(db, 'artifacts', appId, 'public', 'data', 'relationships', docId);
+        try {
+            if(action === 'accepted') {
+                await updateDoc(relRef, { status: 'accepted' });
+                showToast("Request Accepted!");
+            } else {
+                await deleteDoc(relRef);
+                showToast("Request Declined");
+            }
+            if(document.getElementById('search-user-input').value) searchUsers();
+        } catch(e) {
+            showToast("Error updating request");
+        }
+    };
+
+    // --- COMPARISON (VS) LOGIC ---
+    window.openComparison = (friendUid) => {
+        const friend = publicUsersMap[friendUid];
+        if(!friend || !currentUserData) return;
+
+        const myScore = currentUserData.score || 0;
+        const friendScore = friend.score || 0;
+        const total = (myScore + friendScore) || 1; // avoid / 0
+
+        // Set Text
+        document.getElementById('comp-me-avatar').innerText = currentUserData.avatar || '👤';
+        document.getElementById('comp-me-name').innerText = currentUserData.username;
+        document.getElementById('comp-me-score').innerText = myScore;
+
+        document.getElementById('comp-friend-avatar').innerText = friend.avatar || '👤';
+        document.getElementById('comp-friend-name').innerText = friend.username;
+        document.getElementById('comp-friend-score').innerText = friendScore;
+
+        // Set Bars
+        document.getElementById('vs-bar-me').style.width = `${(myScore / total) * 100}%`;
+        document.getElementById('vs-bar-friend').style.width = `${(friendScore / total) * 100}%`;
+
+        // Message
+        const msgEl = document.getElementById('comp-message');
+        if (myScore > friendScore) {
+            msgEl.innerText = "You're in the lead! Keep it up!";
+            msgEl.style.color = "var(--success)";
+        } else if (myScore < friendScore) {
+            msgEl.innerText = "They are pulling ahead! Log a workout to catch up!";
+            msgEl.style.color = "var(--danger)";
+        } else {
+            msgEl.innerText = "It's a tie! Time to grind!";
+            msgEl.style.color = "var(--warning)";
+        }
+
+        document.getElementById('comparison-modal').classList.remove('hidden');
+    };
+
+    window.closeComparison = () => {
+        document.getElementById('comparison-modal').classList.add('hidden');
+    };
+
+
+    // --- ACTIONS TRIGGERING POINTS ---
     window.addWater = async () => {
         const input = document.getElementById('water-input');
         const amount = parseInt(input.value);
         if(!amount || amount <= 0) return;
         await updateDailyLog('water', amount);
         input.value = '';
+        await awardPoints(5); // +5 for hydration effort
     };
 
     window.addWaterFast = async (amount) => {
         await updateDailyLog('water', amount);
-        showToast(`Added ${amount}ml water`);
+        showToast(`Added ${amount}ml water (+5 pts)`);
+        await awardPoints(5);
     };
 
     window.addCalories = async () => {
@@ -882,26 +1085,9 @@
         if(!amount || amount <= 0) return;
         await updateDailyLog('calories', amount);
         input.value = '';
-        showToast(`Logged ${amount} kcal`);
+        showToast(`Logged ${amount} kcal (+5 pts)`);
+        await awardPoints(5);
     };
-
-    async function updateDailyLog(field, amount) {
-        if (!currentUserId) return;
-        const dailyRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'daily_logs', getTodayStr());
-        
-        try {
-            const docSnap = await getDoc(dailyRef);
-            if (docSnap.exists()) {
-                const currentVal = docSnap.data()[field] || 0;
-                await updateDoc(dailyRef, { [field]: currentVal + amount });
-            } else {
-                await setDoc(dailyRef, { [field]: amount });
-            }
-        } catch(e) {
-            console.error(e);
-            showToast("Error saving data");
-        }
-    }
 
     window.updateWeight = async () => {
         if (!currentUserId) return;
@@ -913,8 +1099,9 @@
         await updateDoc(profileRef, { weight: newWeight });
         
         input.value = '';
-        showToast("Weight updated successfully!");
-        await loadUserProfile(); // Recalculate BMI & Targets
+        showToast("Weight updated! (+10 pts)");
+        await loadUserProfile(); // Recalculate BMI
+        await awardPoints(10);
     };
 
     window.saveWorkout = async () => {
@@ -934,15 +1121,16 @@
         }
 
         try {
-            // 1. Save to Personal Log
+            // 1. Personal Log
             const personalRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
             await addDoc(personalRef, workoutData);
 
-            // 2. Save to Global DB (so others can use the name)
+            // 2. Global DB 
             const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'global_workouts', name.toLowerCase().replace(/\s+/g, '_'));
             await setDoc(globalRef, { name, type }, { merge: true });
 
-            showToast("Workout Logged!");
+            showToast("Workout Logged! (+50 pts)");
+            await awardPoints(50); // Big points for working out!
             
             // Clear inputs
             document.getElementById('workout-name').value = '';
@@ -951,14 +1139,126 @@
             document.getElementById('workout-time').value = '';
             document.getElementById('workout-dist').value = '';
             
-            // Switch back to dashboard to see the logged workout
             switchTab('dashboard');
-
         } catch (error) {
-            console.error("Error adding workout:", error);
+            console.error(error);
             showToast("Error saving workout");
         }
     };
+
+    // Database core log updater
+    async function updateDailyLog(field, amount) {
+        if (!currentUserId) return;
+        const dailyRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'daily_logs', getTodayStr());
+        try {
+            const docSnap = await getDoc(dailyRef);
+            if (docSnap.exists()) {
+                const currentVal = docSnap.data()[field] || 0;
+                await updateDoc(dailyRef, { [field]: currentVal + amount });
+            } else {
+                await setDoc(dailyRef, { [field]: amount });
+            }
+        } catch(e) {
+            console.error(e);
+            showToast("Error saving data");
+        }
+    }
+
+    // --- OTHER USER PROFILE ACTIONS ---
+    window.toggleEditUsername = () => {
+        const container = document.getElementById('edit-username-container');
+        container.classList.toggle('hidden');
+        if (!container.classList.contains('hidden') && currentUserData) {
+            document.getElementById('edit-username-input').value = currentUserData.username || '';
+        }
+    };
+
+    window.saveUsername = async () => {
+        const newName = document.getElementById('edit-username-input').value.trim();
+        if (!newName) return showToast("Username cannot be empty.");
+        if (!currentUserId) return;
+
+        try {
+            const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+            await updateDoc(profileRef, { username: newName });
+            
+            await updatePublicProfile(currentUserId, newName, currentUserData.avatar || '👤', currentUserData.score || 0);
+
+            currentUserData.username = newName;
+            document.getElementById('display-username').innerText = newName;
+            toggleEditUsername();
+            showToast("Username updated!");
+        } catch (e) {
+            showToast("Failed to update username");
+        }
+    };
+
+    window.toggleAvatarSelector = () => {
+        document.getElementById('avatar-selector').classList.toggle('hidden');
+    };
+
+    window.setAvatar = async (emoji) => {
+        if (!currentUserId) return;
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { avatar: emoji });
+        
+        await updatePublicProfile(currentUserId, currentUserData.username, emoji, currentUserData.score || 0);
+
+        currentUserData.avatar = emoji;
+        document.getElementById('user-avatar').innerText = emoji;
+        document.getElementById('avatar-selector').classList.add('hidden');
+        showToast("Avatar updated!");
+    };
+
+    window.logCycleStart = async () => {
+        if (!currentUserId) return;
+        const dateInput = document.getElementById('cycle-date').value;
+        if (!dateInput) return showToast("Please select a date.");
+
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { lastCycleStart: dateInput });
+        
+        showToast("Cycle Day 1 Logged!");
+        document.getElementById('cycle-date').value = '';
+        
+        currentUserData.lastCycleStart = dateInput;
+        updateCycleUI();
+    };
+
+    function updateCycleUI() {
+        if (!currentUserData || currentUserData.gender !== 'female') return;
+        
+        const statusDiv = document.getElementById('cycle-status');
+        if (!currentUserData.lastCycleStart) {
+            statusDiv.innerHTML = '<p>No cycle data logged yet.</p>';
+            return;
+        }
+
+        const lastStart = new Date(currentUserData.lastCycleStart);
+        const cycleLength = 28; 
+        
+        const nextCycle = new Date(lastStart);
+        nextCycle.setDate(nextCycle.getDate() + cycleLength);
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        const diffTime = nextCycle - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let statusHtml = '';
+        if (diffDays > 0) {
+            statusHtml = `<p style="color: var(--primary); font-size: 1.1rem; font-weight: bold;">Next cycle in ${diffDays} days</p>
+                          <p style="font-size: 0.8rem; margin-top: 4px;">Predicted start: ${nextCycle.toLocaleDateString()}</p>`;
+        } else if (diffDays === 0) {
+            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">Predicted to start today!</p>`;
+        } else {
+            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">${Math.abs(diffDays)} days late</p>
+                          <p style="font-size: 0.8rem; margin-top: 4px;">Log your new Day 1 below when it begins.</p>`;
+        }
+        
+        statusDiv.innerHTML = statusHtml;
+    }
 
 </script>
 </body>
