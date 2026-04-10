@@ -403,10 +403,18 @@
             <div id="friend-requests-list"></div>
         </div>
 
+        <!-- Global Leaderboard -->
+        <div class="card">
+            <h3>🌍 Global Top 2</h3>
+            <div id="global-leaderboard-list">
+                <p style="font-size: 0.9rem; color: var(--text-muted);">Loading global leaders...</p>
+            </div>
+        </div>
+
         <!-- Friends List -->
         <div class="card">
-            <h3>🏆 My Friends Leaderboard</h3>
-            <p>Tap a friend to go Head-to-Head!</p>
+            <h3>🏆 Friends Leaderboard</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">Top 3 are awarded medals! Tap a friend to go Head-to-Head.</p>
             <div id="my-friends-list">
                 <p style="font-size: 0.9rem; color: var(--text-muted);">No friends yet. Add someone below!</p>
             </div>
@@ -723,8 +731,9 @@
                 }
             });
 
-            renderRequestsList(requests);
-            renderFriendsList(friends);
+            lastRequests = requests;
+            lastFriends = friends;
+            renderSocialLists();
 
         }, (err) => console.error(err));
     }
@@ -877,16 +886,49 @@
 
     // --- SOCIAL & FRIEND LOGIC ---
 
-    // Initial render triggers if map updates late
     let lastRequests = [];
     let lastFriends = [];
     function renderSocialLists() {
+        renderGlobalLeaderboard();
         renderRequestsList(lastRequests);
         renderFriendsList(lastFriends);
     }
 
+    function renderGlobalLeaderboard() {
+        const listEl = document.getElementById('global-leaderboard-list');
+        if(!listEl) return;
+        listEl.innerHTML = '';
+
+        const allUsers = Object.values(publicUsersMap)
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+            .slice(0, 2);
+
+        if (allUsers.length === 0) {
+            listEl.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users yet.</p>';
+            return;
+        }
+
+        allUsers.forEach((user, index) => {
+            const medal = index === 0 ? '🥇' : '🥈';
+            const isMe = user.uid === currentUserId;
+            
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div class="flex-row">
+                    <span style="font-weight: bold; width: 30px; font-size: 1.2rem; text-align: center;">${medal}</span>
+                    <span style="font-size: 1.5rem;">${user.avatar || '👤'}</span>
+                    <span>${user.username} ${isMe ? '<span style="color:var(--text-muted);font-size:0.8em;">(You)</span>' : ''}</span>
+                </div>
+                <div class="badge" style="background: var(--primary-variant); color: #fff;">
+                    Score: ${user.score || 0}
+                </div>
+            `;
+            listEl.appendChild(div);
+        });
+    }
+
     function renderRequestsList(requests) {
-        lastRequests = requests;
         const listEl = document.getElementById('friend-requests-list');
         const cardEl = document.getElementById('requests-card');
         listEl.innerHTML = '';
@@ -919,7 +961,6 @@
     }
 
     function renderFriendsList(friends) {
-        lastFriends = friends;
         const listEl = document.getElementById('my-friends-list');
         listEl.innerHTML = '';
 
@@ -928,26 +969,41 @@
             return;
         }
 
-        // Sort friends by score
-        const sortedFriends = friends
-            .map(uid => publicUsersMap[uid])
-            .filter(u => u) // Remove undefined
-            .sort((a, b) => (b.score || 0) - (a.score || 0));
+        // Include current user in the leaderboard to see how they rank against friends
+        const allCompetitors = friends.map(uid => publicUsersMap[uid]).filter(u => u);
+        
+        if(currentUserData && currentUserId) {
+            const myPublicData = publicUsersMap[currentUserId] || { ...currentUserData, uid: currentUserId };
+            // Ensure we don't add duplicates
+            if (!allCompetitors.find(u => u.uid === currentUserId)) {
+                allCompetitors.push(myPublicData);
+            }
+        }
 
-        sortedFriends.forEach((user, index) => {
-            const isWinner = (currentUserData.score || 0) < (user.score || 0);
+        // Sort friends by score
+        const sortedCompetitors = allCompetitors.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+        sortedCompetitors.forEach((user, index) => {
+            const isMe = user.uid === currentUserId;
+            
+            let rankBadge = `<span style="color: var(--text-muted);">#${index+1}</span>`;
+            if (index === 0) rankBadge = '🥇';
+            if (index === 1) rankBadge = '🥈';
+            if (index === 2) rankBadge = '🥉';
             
             const div = document.createElement('div');
-            div.className = 'list-item friend-item';
-            div.onclick = () => openComparison(user.uid);
+            div.className = 'list-item ' + (isMe ? '' : 'friend-item');
+            if (!isMe) {
+                div.onclick = () => openComparison(user.uid);
+            }
             
             div.innerHTML = `
                 <div class="flex-row">
-                    <span style="font-weight: bold; color: var(--text-muted); width: 20px;">#${index+1}</span>
+                    <span style="font-weight: bold; width: 30px; text-align: center; font-size: 1.1rem;">${rankBadge}</span>
                     <span style="font-size: 1.5rem;">${user.avatar || '👤'}</span>
-                    <span>${user.username}</span>
+                    <span>${user.username} ${isMe ? '<span style="color:var(--text-muted);font-size:0.8em;">(You)</span>' : ''}</span>
                 </div>
-                <div class="badge" style="background: ${isWinner ? 'var(--secondary)' : 'var(--surface)'}; color: ${isWinner ? '#000' : 'var(--primary)'}">
+                <div class="badge" style="background: ${isMe ? 'var(--primary-variant)' : 'var(--surface)'}; color: ${isMe ? '#fff' : 'var(--primary)'}">
                     Score: ${user.score || 0}
                 </div>
             `;
