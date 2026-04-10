@@ -361,9 +361,9 @@
         </div>
     </div>
 
-    <!-- ADD WORKOUT VIEW -->
+    <!-- ADD/EDIT WORKOUT VIEW -->
     <div id="view-workout" class="view-section">
-        <h2>Add Workout</h2>
+        <h2 id="workout-view-title">Add Workout</h2>
         <div class="card">
             <select id="workout-type" onchange="toggleWorkoutFields()">
                 <option value="strength">Strength Training</option>
@@ -388,7 +388,8 @@
                 </div>
             </div>
 
-            <button onclick="saveWorkout()">Save Workout</button>
+            <button id="btn-save-workout" onclick="saveWorkout()">Save Workout</button>
+            <button id="btn-cancel-edit" class="secondary hidden" style="margin-top: 10px;" onclick="cancelEditWorkout()">Cancel Edit</button>
         </div>
     </div>
 
@@ -514,6 +515,7 @@
     let currentUserData = null;
     let currentUserId = null;
     let targets = { water: 2500, cals: 2000 }; 
+    let editingWorkoutId = null; // Track if we are editing a workout
     
     // Listeners
     let unsubDaily = null;
@@ -523,7 +525,8 @@
 
     // Caches
     let publicUsersMap = {};
-    let myRelationships = {}; // Format: { [targetUid]: 'pending' | 'accepted' }
+    let myRelationships = {}; 
+    let currentWorkoutsMap = {}; // Cache to hold today's workouts for easy editing
 
     // --- UTILITIES ---
     const getTodayStr = () => {
@@ -556,6 +559,8 @@
         let currentScore = currentUserData.score || 0;
         let newScore = currentScore + pts;
         
+        if (newScore < 0) newScore = 0; // Ensure score never falls below zero
+        
         currentUserData.score = newScore;
         document.getElementById('my-score-display').innerText = newScore;
         
@@ -579,8 +584,12 @@
     window.switchTab = (tabId) => {
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        
         document.getElementById(`view-${tabId}`).classList.add('active');
-        event.currentTarget.classList.add('active');
+        
+        // Update nav icon highlight
+        const targetNav = document.querySelector(`.nav-item[onclick="switchTab('${tabId}')"]`);
+        if(targetNav) targetNav.classList.add('active');
     };
 
     window.toggleWorkoutFields = () => {
@@ -664,6 +673,7 @@
             currentUserData = null;
             publicUsersMap = {};
             myRelationships = {};
+            currentWorkoutsMap = {};
             document.getElementById('bottom-nav').classList.remove('active');
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
             document.getElementById('view-auth').classList.add('active');
@@ -812,21 +822,35 @@
         const workoutsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
         
         unsubWorkouts = onSnapshot(workoutsRef, (snapshot) => {
+            currentWorkoutsMap = {};
             const todayStr = getTodayStr();
             const listEl = document.getElementById('today-workouts-list');
             listEl.innerHTML = '';
             let count = 0;
 
-            snapshot.forEach(doc => {
-                const data = doc.data();
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data();
                 if(data.date === todayStr) {
                     count++;
+                    currentWorkoutsMap[docSnap.id] = data; // Cache for editing
+                    
                     const div = document.createElement('div');
                     div.className = 'workout-item flex-between';
+                    
                     let details = data.type === 'strength' 
                         ? `${data.weight}kg x ${data.reps} reps`
                         : `${data.time} mins, ${data.distance} km`;
-                    div.innerHTML = `<span><strong>${data.name}</strong></span> <span>${details}</span>`;
+                    
+                    div.innerHTML = `
+                        <div style="flex: 1;">
+                            <span><strong>${data.name}</strong></span><br>
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">${details}</span>
+                        </div>
+                        <div class="flex-row" style="gap: 5px;">
+                            <button class="small secondary" style="padding: 4px 8px; font-size: 0.8rem;" onclick="editWorkout('${docSnap.id}')">✏️</button>
+                            <button class="small danger" style="padding: 4px 8px; font-size: 0.8rem;" onclick="deleteWorkout('${docSnap.id}')">🗑️</button>
+                        </div>
+                    `;
                     listEl.appendChild(div);
                 }
             });
@@ -1063,6 +1087,66 @@
     };
 
 
+    // --- WORKOUT EDITING & DELETION LOGIC ---
+    
+    window.deleteWorkout = async (docId) => {
+        if (!currentUserId) return;
+        try {
+            await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUserId, 'workouts', docId));
+            showToast("Workout deleted. (-50 pts)");
+            await awardPoints(-50); // Remove the points gained from adding it
+        } catch(e) {
+            showToast("Error deleting workout.");
+        }
+    };
+
+    window.editWorkout = (docId) => {
+        const workout = currentWorkoutsMap[docId];
+        if(!workout) return;
+
+        editingWorkoutId = docId;
+
+        // Populate the form
+        document.getElementById('workout-view-title').innerText = "Edit Workout";
+        document.getElementById('workout-name').value = workout.name;
+        document.getElementById('workout-type').value = workout.type;
+        toggleWorkoutFields();
+
+        if(workout.type === 'strength') {
+            document.getElementById('workout-weight').value = workout.weight || '';
+            document.getElementById('workout-reps').value = workout.reps || '';
+        } else {
+            document.getElementById('workout-time').value = workout.time || '';
+            document.getElementById('workout-dist').value = workout.distance || '';
+        }
+
+        // Update Buttons
+        document.getElementById('btn-save-workout').innerText = "Update Workout";
+        document.getElementById('btn-cancel-edit').classList.remove('hidden');
+
+        // Switch to Workout tab
+        switchTab('workout');
+    };
+
+    window.cancelEditWorkout = () => {
+        editingWorkoutId = null;
+        
+        // Reset form
+        document.getElementById('workout-view-title').innerText = "Add Workout";
+        document.getElementById('workout-name').value = '';
+        document.getElementById('workout-weight').value = '';
+        document.getElementById('workout-reps').value = '';
+        document.getElementById('workout-time').value = '';
+        document.getElementById('workout-dist').value = '';
+
+        // Reset Buttons
+        document.getElementById('btn-save-workout').innerText = "Save Workout";
+        document.getElementById('btn-cancel-edit').classList.add('hidden');
+
+        // Go back to Dashboard
+        switchTab('dashboard');
+    };
+
     // --- ACTIONS TRIGGERING POINTS ---
     window.addWater = async () => {
         const input = document.getElementById('water-input');
@@ -1121,25 +1205,44 @@
         }
 
         try {
-            // 1. Personal Log
-            const personalRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
-            await addDoc(personalRef, workoutData);
+            if (editingWorkoutId) {
+                // Update Existing Workout
+                const workoutRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'workouts', editingWorkoutId);
+                // We don't overwrite timestamp or date when updating, just the metrics
+                await updateDoc(workoutRef, {
+                    name: workoutData.name,
+                    type: workoutData.type,
+                    weight: workoutData.weight || null,
+                    reps: workoutData.reps || null,
+                    time: workoutData.time || null,
+                    distance: workoutData.distance || null
+                });
+                
+                showToast("Workout Updated!");
+                cancelEditWorkout(); // Resets form and switches tab
+                
+            } else {
+                // Add New Workout (Normal Flow)
+                const personalRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
+                await addDoc(personalRef, workoutData);
 
-            // 2. Global DB 
+                showToast("Workout Logged! (+50 pts)");
+                await awardPoints(50); // Points only gained on NEW additions
+                
+                // Clear inputs
+                document.getElementById('workout-name').value = '';
+                document.getElementById('workout-weight').value = '';
+                document.getElementById('workout-reps').value = '';
+                document.getElementById('workout-time').value = '';
+                document.getElementById('workout-dist').value = '';
+                
+                switchTab('dashboard');
+            }
+
+            // Always update Global DB so typo-fixes benefit the community
             const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'global_workouts', name.toLowerCase().replace(/\s+/g, '_'));
             await setDoc(globalRef, { name, type }, { merge: true });
 
-            showToast("Workout Logged! (+50 pts)");
-            await awardPoints(50); // Big points for working out!
-            
-            // Clear inputs
-            document.getElementById('workout-name').value = '';
-            document.getElementById('workout-weight').value = '';
-            document.getElementById('workout-reps').value = '';
-            document.getElementById('workout-time').value = '';
-            document.getElementById('workout-dist').value = '';
-            
-            switchTab('dashboard');
         } catch (error) {
             console.error(error);
             showToast("Error saving workout");
