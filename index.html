@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vitality | Tracker</title>
+    <title>Vitality | Health Tracker</title>
     <style>
         :root {
             --bg: #121212;
             --surface: #1e1e1e;
+            --surface-light: #2c2c2c;
             --primary: #bb86fc;
             --primary-variant: #3700b3;
+            --secondary: #03dac6;
             --text-main: #ffffff;
             --text-muted: #a0a0a0;
             --border: #333333;
             --danger: #cf6679;
+            --success: #4caf50;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -27,7 +30,6 @@
             overflow-x: hidden;
         }
 
-        /* Mobile Container */
         #app-container {
             width: 100%;
             max-width: 480px;
@@ -39,16 +41,16 @@
         }
 
         /* Typography & Inputs */
-        h1, h2, h3 { font-weight: 600; margin-bottom: 15px; }
+        h1, h2, h3 { font-weight: 600; margin-bottom: 12px; }
         p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px; }
         
         input, select, button {
             width: 100%;
             padding: 12px;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             border-radius: 8px;
             border: 1px solid var(--border);
-            background-color: var(--surface);
+            background-color: var(--surface-light);
             color: var(--text-main);
             font-size: 1rem;
             outline: none;
@@ -66,13 +68,14 @@
         }
         button:active { opacity: 0.8; }
         button.secondary { background-color: transparent; color: var(--primary); border: 1px solid var(--primary); }
+        button.small { padding: 8px; font-size: 0.9rem; width: auto; flex-shrink: 0; }
 
-        /* Sections */
+        /* Sections & Cards */
         .view-section {
             display: none;
             padding: 20px;
             flex: 1;
-            padding-bottom: 80px; /* Space for nav */
+            padding-bottom: 80px;
             animation: fadeIn 0.3s ease-in-out;
         }
         .view-section.active { display: block; }
@@ -82,13 +85,42 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Cards */
         .card {
             background-color: var(--surface);
-            padding: 15px;
+            padding: 16px;
             border-radius: 12px;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             border: 1px solid var(--border);
+        }
+
+        /* Layout Utilities */
+        .flex-row { display: flex; gap: 10px; align-items: center; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .hidden { display: none !important; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        /* Progress & Metrics */
+        .metric-highlight { color: var(--primary); font-weight: bold; font-size: 1.2rem; }
+        .progress-bar { width: 100%; height: 8px; background: var(--border); border-radius: 4px; margin-top: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; }
+        .progress-fill.success { background: var(--success); }
+
+        .bmi-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            background: var(--surface-light);
+        }
+
+        /* Lists */
+        .workout-item {
+            background: var(--surface-light);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
         }
 
         /* Bottom Nav */
@@ -101,16 +133,16 @@
             border-top: 1px solid var(--border);
             display: flex;
             justify-content: space-around;
-            padding: 15px 0;
+            padding: 12px 0;
             z-index: 100;
-            display: none; /* Hidden until login */
+            display: none;
         }
-        nav.active { display: flex; }
+        nav.active { display: flex; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
         
         .nav-item {
             color: var(--text-muted);
             text-decoration: none;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -119,47 +151,44 @@
         .nav-item.active { color: var(--primary); }
         .nav-icon { font-size: 1.5rem; margin-bottom: 4px; }
 
-        /* Specific UI Elements */
-        .flex-row { display: flex; gap: 10px; }
-        .hidden { display: none !important; }
-        
-        /* Ephemeral Chat Box */
-        #chat-messages {
-            height: 200px;
-            overflow-y: auto;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+        /* Toast Notification */
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--secondary);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
         }
-        .msg-bubble {
-            background: var(--surface);
-            padding: 8px 12px;
-            border-radius: 12px;
-            max-width: 80%;
-            font-size: 0.85rem;
-        }
-        .msg-bubble.self { background: var(--primary-variant); align-self: flex-end; }
+        #toast.show { opacity: 1; }
+
     </style>
 </head>
 <body>
+
+<div id="toast">Message</div>
 
 <div id="app-container">
 
     <!-- AUTHENTICATION VIEW -->
     <div id="view-auth" class="view-section active">
         <h1 style="text-align: center; margin-top: 40px; color: var(--primary);">Vitality</h1>
-        <p style="text-align: center;">Your personal human tracking dashboard.</p>
+        <p style="text-align: center;">Your intelligent human tracking dashboard.</p>
         
         <div class="card" style="margin-top: 30px;">
             <h2 id="auth-title">Login</h2>
             <input type="email" id="auth-email" placeholder="Email">
             <input type="password" id="auth-password" placeholder="Password">
             
-            <!-- Only shown on signup -->
+            <!-- Signup Only Fields -->
             <div id="signup-fields" class="hidden">
                 <input type="text" id="auth-username" placeholder="Username">
                 <select id="auth-gender">
@@ -167,10 +196,15 @@
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                 </select>
+                <div class="grid-2">
+                    <input type="number" id="auth-age" placeholder="Age (Yrs)">
+                    <input type="number" id="auth-height" placeholder="Height (cm)">
+                </div>
+                <input type="number" id="auth-weight" placeholder="Weight (kg)">
             </div>
 
             <button id="btn-action" onclick="handleAuth()">Login</button>
-            <p style="text-align: center; cursor: pointer; color: var(--primary);" onclick="toggleAuthMode()">
+            <p style="text-align: center; cursor: pointer; color: var(--primary); margin-top: 15px;" onclick="toggleAuthMode()">
                 <span id="auth-toggle-text">Need an account? Sign up</span>
             </p>
         </div>
@@ -178,33 +212,87 @@
 
     <!-- DASHBOARD VIEW -->
     <div id="view-dashboard" class="view-section">
-        <h2>Dashboard</h2>
+        <div class="flex-between">
+            <h2>Dashboard</h2>
+            <div id="bmi-display" class="bmi-badge">BMI: --</div>
+        </div>
         
+        <!-- Targets Card -->
         <div class="card">
-            <h3>💧 Water Intake</h3>
-            <p>Today: <span id="water-today" style="color: var(--primary); font-weight: bold;">0</span> ml</p>
-            <div class="flex-row">
-                <button onclick="addWater(250)">+250ml</button>
-                <button onclick="addWater(500)">+500ml</button>
+            <h3>Daily Targets</h3>
+            <p style="margin-bottom: 5px;">Based on your biometrics:</p>
+            <div class="grid-2">
+                <div style="background: var(--surface-light); padding: 10px; border-radius: 8px;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted)">Calorie Goal</div>
+                    <div class="metric-highlight"><span id="target-cals">--</span> kcal</div>
+                </div>
+                <div style="background: var(--surface-light); padding: 10px; border-radius: 8px;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted)">Water Goal</div>
+                    <div class="metric-highlight"><span id="target-water">--</span> ml</div>
+                </div>
             </div>
-            <p style="font-size: 0.75rem; margin-top: 10px;">Weekly/Monthly views available in full analytics.</p>
         </div>
 
+        <!-- Water Tracker -->
         <div class="card">
-            <h3>🔥 Calories & Weight</h3>
-            <div class="flex-row">
-                <input type="number" id="daily-cals" placeholder="Kcal Consumed">
-                <input type="number" id="daily-weight" placeholder="Weight (kg)">
+            <div class="flex-between">
+                <h3>💧 Water Intake</h3>
+                <span class="metric-highlight"><span id="water-current">0</span> ml</span>
             </div>
-            <button class="secondary" onclick="saveMetrics()">Log Metrics</button>
+            <div class="progress-bar"><div id="water-progress" class="progress-fill" style="width: 0%;"></div></div>
+            <p style="text-align: right; font-size: 0.8rem; margin-top: 4px;">Target: <span id="water-target-display">--</span> ml</p>
+            
+            <div class="flex-row" style="margin-top: 10px;">
+                <input type="number" id="water-input" placeholder="Amount (ml)" style="margin-bottom: 0;">
+                <button class="small" onclick="addWater()">Add</button>
+            </div>
+            <div class="flex-row" style="margin-top: 10px;">
+                <button class="secondary small" style="flex: 1;" onclick="addWaterFast(250)">+250ml</button>
+                <button class="secondary small" style="flex: 1;" onclick="addWaterFast(500)">+500ml</button>
+            </div>
+        </div>
+
+        <!-- Calorie Tracker -->
+        <div class="card">
+            <div class="flex-between">
+                <h3>🔥 Calories Consumed</h3>
+                <span class="metric-highlight"><span id="cals-current">0</span> kcal</span>
+            </div>
+            <div class="progress-bar"><div id="cals-progress" class="progress-fill" style="width: 0%;"></div></div>
+            <p style="text-align: right; font-size: 0.8rem; margin-top: 4px;">Target: <span id="cals-target-display">--</span> kcal</p>
+
+            <div class="flex-row" style="margin-top: 10px;">
+                <input type="number" id="cals-input" placeholder="Kcal Consumed" style="margin-bottom: 0;">
+                <button class="small" onclick="addCalories()">Log</button>
+            </div>
+        </div>
+
+        <!-- Weight Updater -->
+        <div class="card">
+            <h3>⚖️ Update Weight</h3>
+            <p>Current logged weight: <span id="current-weight-display" class="metric-highlight">--</span> kg</p>
+            <div class="flex-row">
+                <input type="number" id="weight-input" placeholder="New Weight (kg)" style="margin-bottom: 0;">
+                <button class="small" onclick="updateWeight()">Update</button>
+            </div>
+        </div>
+
+        <!-- Today's Workouts -->
+        <div class="card">
+            <h3>🏋️ Today's Workouts</h3>
+            <div id="today-workouts-list">
+                <p>No workouts logged today.</p>
+            </div>
         </div>
 
         <!-- Conditional Female View -->
         <div id="cycle-tracker" class="card hidden">
             <h3 style="color: #ff80ab;">🌸 Cycle Tracker</h3>
             <p>Log start of cycle to track predictions.</p>
-            <input type="date" id="cycle-date">
-            <button class="secondary">Log Day 1</button>
+            <div class="flex-row">
+                <input type="date" id="cycle-date" style="margin-bottom: 0;">
+                <button class="secondary small">Log Day 1</button>
+            </div>
         </div>
     </div>
 
@@ -217,25 +305,19 @@
                 <option value="cardio">Cardio</option>
             </select>
 
-            <!-- Global Dropdown + Custom Entry -->
-            <p>Select from database or add new (will be shared globally):</p>
+            <p>Select from database or add new:</p>
             <input type="text" id="workout-name" list="global-workouts" placeholder="e.g., Bench Press or Running">
-            <datalist id="global-workouts">
-                <!-- Populated from Firebase -->
-                <option value="Bench Press"></option>
-                <option value="Squat"></option>
-                <option value="Treadmill Run"></option>
-            </datalist>
+            <datalist id="global-workouts"></datalist>
 
             <div id="strength-fields">
-                <div class="flex-row">
+                <div class="grid-2">
                     <input type="number" id="workout-weight" placeholder="Weight (kg)">
                     <input type="number" id="workout-reps" placeholder="Reps">
                 </div>
             </div>
 
             <div id="cardio-fields" class="hidden">
-                <div class="flex-row">
+                <div class="grid-2">
                     <input type="number" id="workout-time" placeholder="Time (mins)">
                     <input type="number" id="workout-dist" placeholder="Distance (km)">
                 </div>
@@ -248,31 +330,19 @@
     <!-- SOCIAL VIEW -->
     <div id="view-social" class="view-section">
         <h2>Social & Feed</h2>
-        
         <div class="card">
             <h3>Find Friends</h3>
             <div class="flex-row">
-                <input type="text" placeholder="Search username...">
-                <button style="width: auto;">Search</button>
+                <input type="text" placeholder="Search username..." style="margin-bottom: 0;">
+                <button class="small">Search</button>
             </div>
         </div>
-
-        <div class="card">
-            <h3>Instant Chat (Ephemeral)</h3>
-            <p style="font-size: 0.7rem;">Messages disappear on refresh.</p>
-            <div id="chat-messages"></div>
-            <div class="flex-row">
-                <input type="text" id="chat-input" placeholder="Say hi...">
-                <button style="width: 80px;" onclick="sendEphemeralMsg()">Send</button>
-            </div>
-        </div>
-
         <div class="card">
             <h3>Friend Feed</h3>
-            <div style="border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px;">
+            <div style="border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; font-size: 0.9rem;">
                 <strong>@alex_fit</strong> hit a new PR on Squats: 120kg x 5!
             </div>
-            <div>
+            <div style="font-size: 0.9rem;">
                 <strong>@sarah_runs</strong> ran 5km in 25:30.
             </div>
         </div>
@@ -280,13 +350,14 @@
 
     <!-- PROFILE VIEW -->
     <div id="view-profile" class="view-section">
-        <h2>Profile</h2>
+        <h2>Profile Settings</h2>
         <div class="card" style="text-align: center;">
-            <div style="width: 100px; height: 100px; border-radius: 50%; background-color: var(--border); margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; font-size: 2rem;">
+            <div style="width: 100px; height: 100px; border-radius: 50%; background-color: var(--border); margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">
                 👤
             </div>
-            <h3 id="display-username">User</h3>
-            <button class="secondary">Change Avatar</button>
+            <h3 id="display-username" style="color: var(--primary);">Loading...</h3>
+            <p id="display-bio">Member since 2024</p>
+            <button class="secondary" style="margin-top: 10px;">Change Avatar</button>
         </div>
         <button class="secondary" style="border-color: var(--danger); color: var(--danger);" onclick="logout()">Logout</button>
     </div>
@@ -313,14 +384,13 @@
 
 </div>
 
-<!-- Firebase SDKs (Modular V10 via CDN) -->
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // Your exact Firebase configuration
-    const firebaseConfig = {
+    // Strict Firebase Config handling
+    const userConfig = {
         apiKey: "AIzaSyAJ9K9fQ0ThMB7aXB6qNHr3_yLUdqJgnCM",
         authDomain: "my-chain-reaction-game.firebaseapp.com",
         projectId: "my-chain-reaction-game",
@@ -328,8 +398,10 @@
         messagingSenderId: "32751418407",
         appId: "1:32751418407:web:ff8244007ef2b099d56202"
     };
+    
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userConfig;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'vitality-app';
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -337,10 +409,25 @@
     // Global State
     let isSignupMode = false;
     let currentUserData = null;
-    let currentWaterIntake = 0;
+    let currentUserId = null;
+    let targets = { water: 2500, cals: 2000 }; 
+    let unsubDaily = null;
+    let unsubWorkouts = null;
+
+    // --- UTILITIES ---
+    const getTodayStr = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    window.showToast = (msg) => {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    };
 
     // --- UI LOGIC ---
-
     window.toggleAuthMode = () => {
         isSignupMode = !isSignupMode;
         document.getElementById('signup-fields').classList.toggle('hidden', !isSignupMode);
@@ -352,9 +439,7 @@
     window.switchTab = (tabId) => {
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        
         document.getElementById(`view-${tabId}`).classList.add('active');
-        // A bit of a hack for the static demo to highlight the right nav icon
         event.currentTarget.classList.add('active');
     };
 
@@ -369,8 +454,7 @@
         }
     };
 
-    // --- FIREBASE AUTH & USER LOGIC ---
-
+    // --- AUTHENTICATION ---
     window.handleAuth = async () => {
         const email = document.getElementById('auth-email').value;
         const password = document.getElementById('auth-password').value;
@@ -379,52 +463,54 @@
             if (isSignupMode) {
                 const username = document.getElementById('auth-username').value;
                 const gender = document.getElementById('auth-gender').value;
-                if (!gender) return alert("Please select a gender.");
+                const age = parseInt(document.getElementById('auth-age').value);
+                const height = parseInt(document.getElementById('auth-height').value);
+                const weight = parseFloat(document.getElementById('auth-weight').value);
+
+                if (!gender || !age || !height || !weight || !username) {
+                    return showToast("Please fill all fields.");
+                }
                 
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
                 
-                // Save additional user info to Firestore
-                await setDoc(doc(db, "users", userCredential.user.uid), {
-                    username: username,
-                    gender: gender,
-                    createdAt: new Date()
-                });
+                // Save user profile securely using exact path rules
+                const profileRef = doc(db, 'artifacts', appId, 'users', userCred.user.uid, 'profile', 'info');
+                await setDoc(profileRef, { username, gender, age, height, weight, createdAt: Date.now() });
+                
+                showToast("Account Created!");
             } else {
                 await signInWithEmailAndPassword(auth, email, password);
+                showToast("Logged In!");
             }
         } catch (error) {
-            alert(error.message);
+            showToast(error.message.replace('Firebase: ', ''));
         }
     };
 
     window.logout = async () => {
+        if(unsubDaily) unsubDaily();
+        if(unsubWorkouts) unsubWorkouts();
         await signOut(auth);
     };
 
-    // Auth State Observer
+    // --- CORE LOGIC & LISTENERS ---
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            // User is signed in
+            currentUserId = user.uid;
             document.getElementById('view-auth').classList.remove('active');
             document.getElementById('bottom-nav').classList.add('active');
-            switchTab('dashboard'); // Default to dash
-
-            // Fetch User Data to apply conditionals (like menstrual cycle for women)
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-                currentUserData = userDoc.data();
-                document.getElementById('display-username').innerText = currentUserData.username || "User";
-                
-                // Show cycle tracker ONLY if gender is female
-                if (currentUserData.gender === 'female') {
-                    document.getElementById('cycle-tracker').classList.remove('hidden');
-                }
-            }
             
-            // Listen to Global Workouts for the dropdown
+            // Load Profile
+            await loadUserProfile();
+            
+            // Setup Realtime Listeners
+            setupDailyListener();
+            setupWorkoutsListener();
             listenToGlobalWorkouts();
+            
+            switchTab('dashboard');
         } else {
-            // User is signed out
+            currentUserId = null;
             currentUserData = null;
             document.getElementById('bottom-nav').classList.remove('active');
             document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
@@ -433,38 +519,210 @@
         }
     });
 
-    // --- FEATURE LOGIC ---
+    async function loadUserProfile() {
+        if (!currentUserId) return;
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        const docSnap = await getDoc(profileRef);
+        
+        if (docSnap.exists()) {
+            currentUserData = docSnap.data();
+            
+            // Update UI Profile
+            document.getElementById('display-username').innerText = currentUserData.username || "User";
+            document.getElementById('current-weight-display').innerText = currentUserData.weight || "--";
+            
+            if (currentUserData.gender === 'female') {
+                document.getElementById('cycle-tracker').classList.remove('hidden');
+            }
 
-    window.addWater = (amount) => {
-        currentWaterIntake += amount;
-        document.getElementById('water-today').innerText = currentWaterIntake;
-        // In a full app, you would save this to Firestore: doc(db, 'water', userId_date)
+            calculateMetrics();
+        }
+    }
+
+    function calculateMetrics() {
+        if (!currentUserData) return;
+        const { weight, height, age, gender } = currentUserData;
+        
+        // BMI
+        const heightM = height / 100;
+        const bmi = (weight / (heightM * heightM)).toFixed(1);
+        let bmiStatus = "Normal";
+        let bmiColor = "var(--success)";
+        if(bmi < 18.5) { bmiStatus = "Underweight"; bmiColor = "#ffb74d"; }
+        else if(bmi > 25) { bmiStatus = "Overweight"; bmiColor = "var(--danger)"; }
+        
+        const bmiEl = document.getElementById('bmi-display');
+        bmiEl.innerText = `BMI: ${bmi} (${bmiStatus})`;
+        bmiEl.style.color = bmiColor;
+
+        // BMR (Mifflin-St Jeor) -> Target Cals
+        let bmr = (10 * weight) + (6.25 * height) - (5 * age);
+        bmr += (gender === 'male') ? 5 : -161;
+        targets.cals = Math.round(bmr * 1.2); // Sedentary multiplier
+        
+        // Target Water (ml) = weight(kg) * 35
+        targets.water = Math.round(weight * 35);
+
+        document.getElementById('target-cals').innerText = targets.cals;
+        document.getElementById('target-water').innerText = targets.water;
+        document.getElementById('cals-target-display').innerText = targets.cals;
+        document.getElementById('water-target-display').innerText = targets.water;
+    }
+
+    function setupDailyListener() {
+        if (!currentUserId) return;
+        const dailyRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'daily_logs', getTodayStr());
+        
+        unsubDaily = onSnapshot(dailyRef, (docSnap) => {
+            let water = 0, cals = 0;
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                water = data.water || 0;
+                cals = data.calories || 0;
+            }
+            
+            // Update Water UI
+            document.getElementById('water-current').innerText = water;
+            let wPct = Math.min((water / targets.water) * 100, 100) || 0;
+            const wBar = document.getElementById('water-progress');
+            wBar.style.width = `${wPct}%`;
+            if(wPct >= 100) wBar.classList.add('success'); else wBar.classList.remove('success');
+
+            // Update Cals UI
+            document.getElementById('cals-current').innerText = cals;
+            let cPct = Math.min((cals / targets.cals) * 100, 100) || 0;
+            const cBar = document.getElementById('cals-progress');
+            cBar.style.width = `${cPct}%`;
+            if(cPct >= 100) cBar.classList.add('success'); else cBar.classList.remove('success');
+            
+        }, (err) => console.error(err));
+    }
+
+    function setupWorkoutsListener() {
+        if (!currentUserId) return;
+        const workoutsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
+        
+        unsubWorkouts = onSnapshot(workoutsRef, (snapshot) => {
+            const todayStr = getTodayStr();
+            const listEl = document.getElementById('today-workouts-list');
+            listEl.innerHTML = '';
+            let count = 0;
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if(data.date === todayStr) {
+                    count++;
+                    const div = document.createElement('div');
+                    div.className = 'workout-item flex-between';
+                    let details = data.type === 'strength' 
+                        ? `${data.weight}kg x ${data.reps} reps`
+                        : `${data.time} mins, ${data.distance} km`;
+                    div.innerHTML = `<span><strong>${data.name}</strong></span> <span>${details}</span>`;
+                    listEl.appendChild(div);
+                }
+            });
+
+            if(count === 0) {
+                listEl.innerHTML = '<p>No workouts logged today.</p>';
+            }
+        }, (err) => console.error(err));
+    }
+
+    function listenToGlobalWorkouts() {
+        if (!currentUserId) return;
+        const globalRef = collection(db, 'artifacts', appId, 'public', 'data', 'global_workouts');
+        onSnapshot(globalRef, (snapshot) => {
+            const datalist = document.getElementById('global-workouts');
+            datalist.innerHTML = ''; 
+            snapshot.forEach((doc) => {
+                const option = document.createElement('option');
+                option.value = doc.data().name;
+                datalist.appendChild(option);
+            });
+        }, (err) => console.error(err));
+    }
+
+    // --- USER ACTIONS ---
+    window.addWater = async () => {
+        const input = document.getElementById('water-input');
+        const amount = parseInt(input.value);
+        if(!amount || amount <= 0) return;
+        await updateDailyLog('water', amount);
+        input.value = '';
     };
 
-    window.saveMetrics = () => {
-        const cals = document.getElementById('daily-cals').value;
-        const weight = document.getElementById('daily-weight').value;
-        if(cals || weight) {
-            alert("Metrics saved for today!"); 
-            // In a full app: save to Firestore subcollection user -> metrics
+    window.addWaterFast = async (amount) => {
+        await updateDailyLog('water', amount);
+        showToast(`Added ${amount}ml water`);
+    };
+
+    window.addCalories = async () => {
+        const input = document.getElementById('cals-input');
+        const amount = parseInt(input.value);
+        if(!amount || amount <= 0) return;
+        await updateDailyLog('calories', amount);
+        input.value = '';
+        showToast(`Logged ${amount} kcal`);
+    };
+
+    async function updateDailyLog(field, amount) {
+        if (!currentUserId) return;
+        const dailyRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'daily_logs', getTodayStr());
+        
+        try {
+            const docSnap = await getDoc(dailyRef);
+            if (docSnap.exists()) {
+                const currentVal = docSnap.data()[field] || 0;
+                await updateDoc(dailyRef, { [field]: currentVal + amount });
+            } else {
+                await setDoc(dailyRef, { [field]: amount });
+            }
+        } catch(e) {
+            console.error(e);
+            showToast("Error saving data");
         }
+    }
+
+    window.updateWeight = async () => {
+        if (!currentUserId) return;
+        const input = document.getElementById('weight-input');
+        const newWeight = parseFloat(input.value);
+        if(!newWeight || newWeight <= 0) return;
+
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { weight: newWeight });
+        
+        input.value = '';
+        showToast("Weight updated successfully!");
+        await loadUserProfile(); // Recalculate BMI & Targets
     };
 
     window.saveWorkout = async () => {
-        const name = document.getElementById('workout-name').value;
+        if (!currentUserId) return;
+        const name = document.getElementById('workout-name').value.trim();
         const type = document.getElementById('workout-type').value;
-        if(!name) return alert("Workout name required.");
+        if(!name) return showToast("Workout name required.");
+
+        let workoutData = { name, type, date: getTodayStr(), timestamp: Date.now() };
+
+        if(type === 'strength') {
+            workoutData.weight = parseFloat(document.getElementById('workout-weight').value) || 0;
+            workoutData.reps = parseInt(document.getElementById('workout-reps').value) || 0;
+        } else {
+            workoutData.time = parseFloat(document.getElementById('workout-time').value) || 0;
+            workoutData.distance = parseFloat(document.getElementById('workout-dist').value) || 0;
+        }
 
         try {
-            // 1. Add to global dropdown collection so everyone can see it
-            // Using setDoc with the name as ID prevents duplicates
-            await setDoc(doc(db, "global_workouts", name.toLowerCase()), {
-                name: name,
-                type: type
-            });
+            // 1. Save to Personal Log
+            const personalRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'workouts');
+            await addDoc(personalRef, workoutData);
 
-            // 2. Save to user's personal log (Mocked alert for demo)
-            alert(`${name} added to your log and the global database!`);
+            // 2. Save to Global DB (so others can use the name)
+            const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'global_workouts', name.toLowerCase().replace(/\s+/g, '_'));
+            await setDoc(globalRef, { name, type }, { merge: true });
+
+            showToast("Workout Logged!");
             
             // Clear inputs
             document.getElementById('workout-name').value = '';
@@ -472,47 +730,14 @@
             document.getElementById('workout-reps').value = '';
             document.getElementById('workout-time').value = '';
             document.getElementById('workout-dist').value = '';
+            
+            // Switch back to dashboard to see the logged workout
+            switchTab('dashboard');
+
         } catch (error) {
             console.error("Error adding workout:", error);
+            showToast("Error saving workout");
         }
-    };
-
-    // Real-time listener to populate the <datalist> for global workouts
-    function listenToGlobalWorkouts() {
-        const datalist = document.getElementById('global-workouts');
-        onSnapshot(collection(db, "global_workouts"), (snapshot) => {
-            datalist.innerHTML = ''; // Clear existing
-            snapshot.forEach((doc) => {
-                const option = document.createElement('option');
-                option.value = doc.data().name;
-                datalist.appendChild(option);
-            });
-        });
-    }
-
-    // Ephemeral Chat Logic (Memory only, disappears on refresh as requested)
-    window.sendEphemeralMsg = () => {
-        const input = document.getElementById('chat-input');
-        const text = input.value.trim();
-        if(!text) return;
-
-        const chatBox = document.getElementById('chat-messages');
-        const bubble = document.createElement('div');
-        bubble.className = 'msg-bubble self';
-        bubble.innerText = text;
-        
-        chatBox.appendChild(bubble);
-        chatBox.scrollTop = chatBox.scrollHeight;
-        input.value = '';
-
-        // Mock auto-reply for demonstration
-        setTimeout(() => {
-            const reply = document.createElement('div');
-            reply.className = 'msg-bubble';
-            reply.innerText = "Wow, great progress!";
-            chatBox.appendChild(reply);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }, 1000);
     };
 
 </script>
