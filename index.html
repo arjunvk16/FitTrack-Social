@@ -1210,13 +1210,18 @@
         if(!amount || amount <= 0) return;
         await updateDailyLog('water', amount);
         input.value = '';
-        await awardPoints(5); // +5 for hydration effort
+        
+        const pts = Math.max(1, Math.floor(amount / 50));
+        showToast(`Added ${amount}ml water (+${pts} pts)`);
+        await awardPoints(pts);
     };
 
     window.addWaterFast = async (amount) => {
         await updateDailyLog('water', amount);
-        showToast(`Added ${amount}ml water (+5 pts)`);
-        await awardPoints(5);
+        
+        const pts = Math.max(1, Math.floor(amount / 50));
+        showToast(`Added ${amount}ml water (+${pts} pts)`);
+        await awardPoints(pts);
     };
 
     window.addCalories = async () => {
