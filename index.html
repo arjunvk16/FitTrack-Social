@@ -122,6 +122,16 @@
             margin-bottom: 8px;
             font-size: 0.9rem;
         }
+        
+        .user-result-item {
+            background: var(--surface-light);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
         /* Bottom Nav */
         nav {
@@ -288,10 +298,13 @@
         <!-- Conditional Female View -->
         <div id="cycle-tracker" class="card hidden">
             <h3 style="color: #ff80ab;">🌸 Cycle Tracker</h3>
-            <p>Log start of cycle to track predictions.</p>
+            <div id="cycle-status" style="margin-bottom: 10px;">
+                <p>No cycle data logged yet.</p>
+            </div>
+            <p>Log start of a new cycle:</p>
             <div class="flex-row">
                 <input type="date" id="cycle-date" style="margin-bottom: 0;">
-                <button class="secondary small">Log Day 1</button>
+                <button class="secondary small" onclick="logCycleStart()">Log Day 1</button>
             </div>
         </div>
     </div>
@@ -333,9 +346,10 @@
         <div class="card">
             <h3>Find Friends</h3>
             <div class="flex-row">
-                <input type="text" placeholder="Search username..." style="margin-bottom: 0;">
-                <button class="small">Search</button>
+                <input type="text" id="search-user-input" placeholder="Search username..." style="margin-bottom: 0;">
+                <button class="small" onclick="searchUsers()">Search</button>
             </div>
+            <div id="search-user-results" style="margin-top: 10px;"></div>
         </div>
         <div class="card">
             <h3>Friend Feed</h3>
@@ -352,12 +366,41 @@
     <div id="view-profile" class="view-section">
         <h2>Profile Settings</h2>
         <div class="card" style="text-align: center;">
-            <div style="width: 100px; height: 100px; border-radius: 50%; background-color: var(--border); margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">
+            <div id="user-avatar" style="width: 100px; height: 100px; border-radius: 50%; background-color: var(--border); margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer;" onclick="toggleAvatarSelector()">
                 👤
             </div>
-            <h3 id="display-username" style="color: var(--primary);">Loading...</h3>
-            <p id="display-bio">Member since 2024</p>
-            <button class="secondary" style="margin-top: 10px;">Change Avatar</button>
+            
+            <!-- Avatar Selection Box -->
+            <div id="avatar-selector" class="hidden" style="margin-bottom: 15px; padding: 10px; background: var(--surface-light); border-radius: 8px;">
+                <p style="margin-bottom: 10px;">Select Avatar:</p>
+                <div style="display: flex; justify-content: center; gap: 12px; font-size: 1.5rem; flex-wrap: wrap;">
+                    <span style="cursor:pointer;" onclick="setAvatar('👤')">👤</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('👩')">👩</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('👨')">👨</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('👱‍♀️')">👱‍♀️</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('🧔')">🧔</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('🏋️‍♀️')">🏋️‍♀️</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('🏃‍♂️')">🏃‍♂️</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('🧘‍♀️')">🧘‍♀️</span>
+                    <span style="cursor:pointer;" onclick="setAvatar('🦁')">🦁</span>
+                </div>
+            </div>
+
+            <div class="flex-row" style="justify-content: center; align-items: center; gap: 5px;">
+                <h3 id="display-username" style="color: var(--primary); margin-bottom: 0;">Loading...</h3>
+                <button class="secondary small" style="padding: 2px 6px; font-size: 0.75rem;" onclick="toggleEditUsername()">Edit</button>
+            </div>
+            
+            <div id="edit-username-container" class="hidden" style="margin-top: 15px; background: var(--surface-light); padding: 10px; border-radius: 8px;">
+                <input type="text" id="edit-username-input" placeholder="New Username" style="margin-bottom: 10px;">
+                <div class="flex-row">
+                    <button class="small" onclick="saveUsername()">Save Name</button>
+                    <button class="secondary small" onclick="toggleEditUsername()">Cancel</button>
+                </div>
+            </div>
+
+            <p id="display-bio" style="margin-top: 10px;">Member since 2024</p>
+            <button class="secondary" style="margin-top: 10px;" onclick="toggleAvatarSelector()">Change Avatar</button>
         </div>
         <button class="secondary" style="border-color: var(--danger); color: var(--danger);" onclick="logout()">Logout</button>
     </div>
@@ -387,7 +430,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Strict Firebase Config handling
     const userConfig = {
@@ -426,6 +469,16 @@
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
     };
+
+    // Helper to keep user search directory updated
+    async function updatePublicProfile(uid, username, avatar) {
+        try {
+            const publicRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_registry', uid);
+            await setDoc(publicRef, { username, avatar, uid }, { merge: true });
+        } catch(e) {
+            console.error("Failed to update public registry", e);
+        }
+    }
 
     // --- UI LOGIC ---
     window.toggleAuthMode = () => {
@@ -472,10 +525,14 @@
                 }
                 
                 const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                const uid = userCred.user.uid;
                 
-                // Save user profile securely using exact path rules
-                const profileRef = doc(db, 'artifacts', appId, 'users', userCred.user.uid, 'profile', 'info');
-                await setDoc(profileRef, { username, gender, age, height, weight, createdAt: Date.now() });
+                // Save private user profile
+                const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'profile', 'info');
+                await setDoc(profileRef, { username, gender, age, height, weight, avatar: '👤', createdAt: Date.now() });
+                
+                // Save to public registry for searching
+                await updatePublicProfile(uid, username, '👤');
                 
                 showToast("Account Created!");
             } else {
@@ -531,8 +588,19 @@
             document.getElementById('display-username').innerText = currentUserData.username || "User";
             document.getElementById('current-weight-display').innerText = currentUserData.weight || "--";
             
+            // Apply custom avatar if it exists
+            if (currentUserData.avatar) {
+                document.getElementById('user-avatar').innerText = currentUserData.avatar;
+            }
+            
             if (currentUserData.gender === 'female') {
                 document.getElementById('cycle-tracker').classList.remove('hidden');
+                updateCycleUI(); // Initialize cycle prediction
+            }
+
+            // Ensure they are in the public registry (migration step for existing accounts)
+            if(currentUserData.username) {
+                updatePublicProfile(currentUserId, currentUserData.username, currentUserData.avatar || '👤');
             }
 
             calculateMetrics();
@@ -642,7 +710,162 @@
         }, (err) => console.error(err));
     }
 
-    // --- USER ACTIONS ---
+    // --- SEARCH USER LOGIC ---
+    window.searchUsers = async () => {
+        if (!currentUserId) return;
+        const queryText = document.getElementById('search-user-input').value.trim().toLowerCase();
+        const resultsDiv = document.getElementById('search-user-results');
+        
+        if (!queryText) {
+            resultsDiv.innerHTML = '';
+            return;
+        }
+
+        resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">Searching...</p>';
+
+        try {
+            // Rule 2 compliant: Fetch all and filter in memory to avoid complex indexing
+            const registryRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_registry');
+            const snapshot = await getDocs(registryRef);
+            
+            resultsDiv.innerHTML = '';
+            let foundCount = 0;
+
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.username && data.username.toLowerCase().includes(queryText) && data.uid !== currentUserId) {
+                    foundCount++;
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'user-result-item';
+                    userDiv.innerHTML = `
+                        <div class="flex-row">
+                            <span style="font-size: 1.5rem; background: var(--surface); width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${data.avatar || '👤'}</span>
+                            <span style="font-weight: 500;">${data.username}</span>
+                        </div>
+                        <button class="secondary small" onclick="sendFriendRequest('${data.uid}')">Add</button>
+                    `;
+                    resultsDiv.appendChild(userDiv);
+                }
+            });
+
+            if (foundCount === 0) {
+                resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users found.</p>';
+            }
+
+        } catch (error) {
+            console.error("Error searching users:", error);
+            resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--danger);">Failed to search.</p>';
+        }
+    };
+
+    window.sendFriendRequest = (uid) => {
+        showToast("Friend Request Sent!");
+    };
+
+    // --- USER PROFILE ACTIONS ---
+
+    window.toggleEditUsername = () => {
+        const container = document.getElementById('edit-username-container');
+        container.classList.toggle('hidden');
+        if (!container.classList.contains('hidden') && currentUserData) {
+            document.getElementById('edit-username-input').value = currentUserData.username || '';
+        }
+    };
+
+    window.saveUsername = async () => {
+        const newName = document.getElementById('edit-username-input').value.trim();
+        if (!newName) return showToast("Username cannot be empty.");
+        if (!currentUserId) return;
+
+        try {
+            // Update private profile
+            const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+            await updateDoc(profileRef, { username: newName });
+            
+            // Update public registry
+            await updatePublicProfile(currentUserId, newName, currentUserData.avatar || '👤');
+
+            // Update UI
+            currentUserData.username = newName;
+            document.getElementById('display-username').innerText = newName;
+            toggleEditUsername();
+            showToast("Username updated!");
+        } catch (e) {
+            console.error("Error updating username", e);
+            showToast("Failed to update username");
+        }
+    };
+
+    window.toggleAvatarSelector = () => {
+        document.getElementById('avatar-selector').classList.toggle('hidden');
+    };
+
+    window.setAvatar = async (emoji) => {
+        if (!currentUserId) return;
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { avatar: emoji });
+        
+        // Update public registry so new avatar shows in search
+        await updatePublicProfile(currentUserId, currentUserData.username, emoji);
+
+        currentUserData.avatar = emoji;
+        document.getElementById('user-avatar').innerText = emoji;
+        document.getElementById('avatar-selector').classList.add('hidden');
+        showToast("Avatar updated!");
+    };
+
+    window.logCycleStart = async () => {
+        if (!currentUserId) return;
+        const dateInput = document.getElementById('cycle-date').value;
+        if (!dateInput) return showToast("Please select a date.");
+
+        const profileRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'profile', 'info');
+        await updateDoc(profileRef, { lastCycleStart: dateInput });
+        
+        showToast("Cycle Day 1 Logged!");
+        document.getElementById('cycle-date').value = '';
+        
+        // Update local state and UI immediately
+        currentUserData.lastCycleStart = dateInput;
+        updateCycleUI();
+    };
+
+    function updateCycleUI() {
+        if (!currentUserData || currentUserData.gender !== 'female') return;
+        
+        const statusDiv = document.getElementById('cycle-status');
+        if (!currentUserData.lastCycleStart) {
+            statusDiv.innerHTML = '<p>No cycle data logged yet.</p>';
+            return;
+        }
+
+        const lastStart = new Date(currentUserData.lastCycleStart);
+        const cycleLength = 28; // Standard average cycle length
+        
+        const nextCycle = new Date(lastStart);
+        nextCycle.setDate(nextCycle.getDate() + cycleLength);
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        // Calculate difference in days
+        const diffTime = nextCycle - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        let statusHtml = '';
+        if (diffDays > 0) {
+            statusHtml = `<p style="color: var(--primary); font-size: 1.1rem; font-weight: bold;">Next cycle in ${diffDays} days</p>
+                          <p style="font-size: 0.8rem; margin-top: 4px;">Predicted start: ${nextCycle.toLocaleDateString()}</p>`;
+        } else if (diffDays === 0) {
+            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">Predicted to start today!</p>`;
+        } else {
+            statusHtml = `<p style="color: var(--danger); font-size: 1.1rem; font-weight: bold;">${Math.abs(diffDays)} days late</p>
+                          <p style="font-size: 0.8rem; margin-top: 4px;">Log your new Day 1 below when it begins.</p>`;
+        }
+        
+        statusDiv.innerHTML = statusHtml;
+    }
+
     window.addWater = async () => {
         const input = document.getElementById('water-input');
         const amount = parseInt(input.value);
