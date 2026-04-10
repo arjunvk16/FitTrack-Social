@@ -346,7 +346,7 @@
         <div class="card">
             <h3>Find Friends</h3>
             <div class="flex-row">
-                <input type="text" id="search-user-input" placeholder="Search username..." style="margin-bottom: 0;">
+                <input type="text" id="search-user-input" placeholder="Search username (leave blank for all)" style="margin-bottom: 0;">
                 <button class="small" onclick="searchUsers()">Search</button>
             </div>
             <div id="search-user-results" style="margin-top: 10px;"></div>
@@ -716,15 +716,10 @@
         const queryText = document.getElementById('search-user-input').value.trim().toLowerCase();
         const resultsDiv = document.getElementById('search-user-results');
         
-        if (!queryText) {
-            resultsDiv.innerHTML = '';
-            return;
-        }
-
         resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">Searching...</p>';
 
         try {
-            // Rule 2 compliant: Fetch all and filter in memory to avoid complex indexing
+            // Fetch all and filter in memory to avoid complex indexing
             const registryRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_registry');
             const snapshot = await getDocs(registryRef);
             
@@ -733,23 +728,25 @@
 
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
-                if (data.username && data.username.toLowerCase().includes(queryText) && data.uid !== currentUserId) {
+                // If query is empty, show all. Otherwise, check if username matches.
+                if (!queryText || (data.username && data.username.toLowerCase().includes(queryText))) {
                     foundCount++;
+                    const isSelf = data.uid === currentUserId;
                     const userDiv = document.createElement('div');
                     userDiv.className = 'user-result-item';
                     userDiv.innerHTML = `
                         <div class="flex-row">
                             <span style="font-size: 1.5rem; background: var(--surface); width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${data.avatar || '👤'}</span>
-                            <span style="font-weight: 500;">${data.username}</span>
+                            <span style="font-weight: 500;">${data.username} ${isSelf ? '<span style="color:var(--text-muted);font-size:0.8em;">(You)</span>' : ''}</span>
                         </div>
-                        <button class="secondary small" onclick="sendFriendRequest('${data.uid}')">Add</button>
+                        ${!isSelf ? `<button class="secondary small" onclick="sendFriendRequest('${data.uid}')">Add</button>` : ''}
                     `;
                     resultsDiv.appendChild(userDiv);
                 }
             });
 
             if (foundCount === 0) {
-                resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users found.</p>';
+                resultsDiv.innerHTML = '<p style="font-size: 0.9rem; color: var(--text-muted);">No users found. Note: Older accounts must log in once to appear here.</p>';
             }
 
         } catch (error) {
